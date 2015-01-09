@@ -1,0 +1,177 @@
+<?php
+App::uses('AppController', 'Controller');
+/**
+ * Businesses Controller
+ *
+ * @property Business $Business
+ * @property PaginatorComponent $Paginator
+ */
+class BusinessesController extends AppController {
+
+/**
+ * Components
+ *
+ * @var array
+ */
+	public $components = array('Paginator','RequestHandler');
+	
+
+/**
+ * index method
+ *
+ * @return void
+ */
+	public function index() {
+		$this->Business->recursive = 0;
+		$this->set('businesses', $this->Paginator->paginate());
+		$this->Business->find();
+		
+	}
+
+/**
+ * view method
+ *
+ * @throws NotFoundException
+ * @param string $id
+ * @return void
+ */
+	public function view($id = null) {
+		
+		if (!$this->Business->exists($id)) {
+			throw new NotFoundException(__('Invalid business'));
+		}
+		$options = array('conditions' => array('Business.' . $this->Business->primaryKey => $id));
+		$this->set('business', $this->Business->find('first', $options));
+	}
+
+/**
+ * add method
+ *
+ * @return void
+ */
+	public function add() {
+		$this->loadModel('SocialMedia');
+		$socialmedia = $this->SocialMedia->find('list',array('fields'=>array('id','mediasitename')));
+		$this->set('socialmedia', $socialmedia);
+		if ($this->request->is('post')) {
+			$this->loadModel('User');
+			$this->User->create();
+			if ($this->User->save($this->request->data['User'])) {
+				$this->request->data['Business']['usertype'] = 'subscriber';
+			    $this->request->data['Business']['user_Id'] = $this->User->getLastInsertId();
+			    $this->Business->create();
+				if ($this->Business->save($this->request->data['Business'])) {
+					$this->Session->setFlash(__('The business has been saved.'));
+					return $this->redirect(array('action' => 'index'));
+				} else {
+					$this->Session->setFlash(__('The business could not be saved. Please, try again.'));
+				}
+			} else {
+				$this->Session->setFlash(__('The user could not be saved. Please, try again.'));
+			}			
+		}
+		$parentBusinesses   = $this->Business->ParentBusiness->find('list');
+		$businessCategories = $this->Business->BusinessCategory->find('list');
+		$countries = $this->Business->Country->find('list',array('fields'=>array('id','country_name')));
+		$this->set(compact('parentBusinesses', 'businessCategories', 'countries'));
+	}
+
+/**
+ * edit method
+ *
+ * @throws NotFoundException
+ * @param string $id
+ * @return void
+ */
+	public function edit($id = null) {
+		//die("fngkjdf");
+		$this->Business->id = $id;
+		if (!$this->Business->exists($id)) {
+			throw new NotFoundException(__('Invalid business'));
+		}
+		if ($this->request->is(array('post', 'put'))) {
+
+			$user_Id = $this->request->data['Business']['user_Id'];
+
+			if ($this->Business->save($this->request->data['Business'])) {
+
+				$this->loadModel('User');
+				$this->User->id = $user_Id;
+				$this->User->save($this->request->data['User']);
+				$this->Session->setFlash(__('The business has been saved.'));
+				return $this->redirect(array('action' => 'index'));
+			} else {
+				$this->Session->setFlash(__('The business could not be saved. Please, try again.'));
+			}
+		} else {
+			$options = array('conditions' => array('Business.' . $this->Business->primaryKey => $id));
+			$business = $this->Business->find('first', $options);
+			$this->request->data['Business'] = $business['Business'];
+			$user_Id = $this->request->data['Business']['user_Id'];
+			$this->loadModel('User');
+			$useroptions = array('conditions' => array('User.' . $this->User->primaryKey => $user_Id));
+			$user = $this->User->find('first', $useroptions);
+			$this->request->data['User'] = $user['User'];
+		}
+
+		$parentBusinesses = $this->Business->ParentBusiness->find('list');
+		$businessCategories = $this->Business->BusinessCategory->find('list');
+		$countries = $this->Business->Country->find('list', array('fields'=>array('id','country_name')));
+		$states = $this->Business->State->find('list', array('fields'=>array('id','stateName')));
+		$cities = $this->Business->City->find('list', array('fields'=>array('id','city_name')));
+		$this->set(compact('parentBusinesses', 'businessCategories','countries', 'states', 'cities'));
+	}
+
+/**
+ * delete method
+ *
+ * @throws NotFoundException
+ * @param string $id
+ * @return void
+ */
+	public function delete($id = null) {
+		$this->Business->id = $id;
+		$specificallyThisOne = $this->Business->find('first', array(
+	        'conditions' => array('Business.id' => $id)
+	 	));
+		if (!$this->Business->exists()) {
+			throw new NotFoundException(__('Invalid business'));
+		}
+		$this->request->allowMethod('post', 'delete');
+		if ($this->Business->delete()) {
+	 	  	$user_Id = $specificallyThisOne['Business']['user_Id'];
+			$this->loadModel('User');
+			$this->User->id = $user_Id;
+			$this->User->delete();
+			$this->Session->setFlash(__('The business has been deleted.'));
+		} else {
+			$this->Session->setFlash(__('The business could not be deleted. Please, try again.'));
+		}
+		return $this->redirect(array('action' => 'index'));
+	}
+
+	public function findState()
+    {	
+    	$this->autoRender=false;
+        if ($this->request->is('Ajax'))
+        {
+        	$country_id = $this->data['id'];
+
+	        $data = $this->Business->State->find('list',array('conditions'=>array('State.country_id'=>$country_id), 'fields'=>array('id','stateName')));   
+	        $this->set('states', $data);
+            echo json_encode(array('html' => $data));
+        }
+    }
+    public function findCity()
+    {	
+    	$this->autoRender=false;
+        if ($this->request->is('Ajax'))
+        {
+        	$state_id = $this->data['id'];
+        	
+	        $data = $this->Business->City->find('list',array('conditions'=>array('City.state_id'=>$state_id), 'fields'=>array('id','city_name')));   
+	        $this->set('cities', $data);
+            echo json_encode(array('html' => $data));
+        }
+    }
+}
